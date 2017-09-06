@@ -1,0 +1,115 @@
+# Due to https://github.com/docker/compose/issues/4675,
+# we are forced to hard-code path in the config when we want
+# to bind to the local fs.
+version: '3'
+
+services:
+  db:
+    image: postgres
+    restart: always
+    volumes:
+      - /storage/postgresdb:/var/lib/postgresql/data
+    env_file:
+      - db.env
+    networks:
+      - nextcloud-tier
+
+  nextcloud:
+    build: ./nextcloud
+    restart: always
+    volumes:
+      - /storage/nextcloud:/var/www/html
+    env_file:
+      - db.env
+    depends_on:
+      - db
+      - redis
+    networks:
+      - nextcloud-tier
+
+  nextcloud-cron:
+    build: ./nextcloud
+    restart: always
+    volumes:
+      - /storage/nextcloud:/var/www/html
+    user: www-data
+    entrypoint: |
+      bash -c 'bash -s <<EOF
+        trap "break;exit" SIGHUP SIGINT SIGTERM
+
+        while [ ! -f /var/www/html/config/config.php ]; do
+          sleep 1
+        done
+
+        while true; do
+          php -f /var/www/html/cron.php
+          sleep 15m
+        done
+      EOF'
+    depends_on:
+      - db
+      - redis
+    networks:
+      - nextcloud-tier
+
+  redis:
+    image: redis
+    restart: always
+    networks:
+      - nextcloud-tier
+
+  web:
+    build: ./web
+    restart: always
+    volumes:
+      - /storage/nextcloud:/var/www/html:ro
+    environment:
+      - VIRTUAL_HOST=charlesvdv.be,cloud.charlesvdv.be
+      - LETSENCRYPT_HOST=charlesvdv.be,cloud.charlesvdv.be
+      - LETSENCRYPT_EMAIL=charles.vandevoorde@hotmail.be
+    depends_on:
+      - nextcloud
+    networks:
+      - proxy-tier
+      - nextcloud-tier
+
+  proxy:
+    build: ./proxy
+    restart: always
+    ports:
+      - 80:80
+      - 443:443
+    labels:
+      com.github.jrcs.letsencrypt_nginx_proxy_companion.nginx_proxy: "true"
+    volumes:
+      - certs:/etc/nginx/certs:ro
+      - conf.d:/etc/nginx/conf.d
+      - vhost.d:/etc/nginx/vhost.d
+      - html:/usr/share/nginx/html
+      - /var/run/docker.sock:/tmp/docker.sock:ro
+    networks:
+      - proxy-tier
+
+  letsencrypt-companion:
+    image: jrcs/letsencrypt-nginx-proxy-companion
+    restart: always
+    volumes:
+      - certs:/etc/nginx/certs
+      - conf.d:/etc/nginx/conf.d
+      - vhost.d:/etc/nginx/vhost.d
+      - html:/usr/share/nginx/html
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - proxy-tier
+    depends_on:
+      - proxy
+
+volumes:
+  certs:
+  conf.d:
+  vhost.d:
+  html:
+
+networks:
+  proxy-tier:
+  nextcloud-tier:

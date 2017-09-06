@@ -1,0 +1,2 @@
+DYNDNS_PASSWD=""
+DB_PASSWD=""

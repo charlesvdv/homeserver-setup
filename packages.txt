@@ -1,0 +1,27 @@
+# Base package.
+vim
+htop
+git
+curl
+python3-pip
+python3
+
+# Used by DynDNS.
+ddclient
+
+# FS
+fuse
+mergerfs
+
+# Monitoring
+smartmontools
+
+# Required for docker install.
+apt-transport-https
+ca-certificates
+curl
+gnupg2
+software-properties-common
+
+# Security
+ufw
